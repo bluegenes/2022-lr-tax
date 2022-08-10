@@ -62,6 +62,8 @@ rule kmer_trim_reads_wc:
     conda: 'conf/env/trim.yml'
     resources:
         mem_mb = int(20e9/ 1e6),
+        partition = "bml",
+        time = "240",
     params:
         mem = 20e9,
     shell: """
@@ -78,7 +80,8 @@ rule sourmash_sketch:
     threads: 1
     resources:
         mem_mb=lambda wildcards, attempt: attempt *3000,
-        runtime=1200,
+        partition = "low2",
+        time = "240",
     log: os.path.join(logs_dir, "sketch", "{sample}.sketch.log")
     benchmark: os.path.join(benchmarks_dir, "sketch", "{sample}.sketch.benchmark")
     conda: "conf/env/sourmash.yml"
@@ -89,13 +92,16 @@ rule sourmash_sketch:
                                           --name {wildcards.sample} -o {output} 2> {log}
         """
 
-localrules: sig_cat
 rule sig_cat:
     input: expand(os.path.join(out_dir, "sigs", "{sample}.sig.gz"), sample=SAMPLES)
     output:
         zipF=os.path.join(out_dir, "sigs", f"{basename}.queries.zip"),
     log: os.path.join(logs_dir, "sig_cat", f"{basename}.sigcat.log")
     benchmark: os.path.join(benchmarks_dir, "sig_cat", f"{basename}.sigcat.benchmark")
+    resources:
+        mem_mb=lambda wildcards, attempt: attempt *3000,
+        partition = "low2",
+        time = "240",
     conda: "conf/env/sourmash.yml"
     shell:
         """
@@ -145,14 +151,15 @@ rule tax_annotate:
         lineages = config['database_lineage_files'],
     output:
         os.path.join(out_dir, 'gather', '{sample}.{alphabet}-k{ksize}-sc{scaled}.gather.with-lineages.csv'),
+    resources:
+        mem_mb=lambda wildcards, attempt: attempt *3000,
+        partition = "low2",
+        time = "240",
     conda: "conf/env/sourmash.yml"
     shell:
         """
         sourmash tax annotate -g {input.gather} -t {' -t'.join(input.lineages)}
         """
-
-
-
 
 localrules: annotated_gather_csvs_to_pathlist
 rule annotated_gather_csvs_to_pathlist:
