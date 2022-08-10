@@ -1,0 +1,9 @@
+name: 2022-lr-tax
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - python=3.9
+  - snakemake=7.12.0
+  - pandas>=1.4.2
