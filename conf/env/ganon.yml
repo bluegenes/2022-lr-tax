@@ -1,0 +1,7 @@
+name: ganon
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - ganon=1.2.0
