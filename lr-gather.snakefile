@@ -55,7 +55,7 @@ onerror:
 rule all:
     input:
         ancient(expand(os.path.join(out_dir, f"{basename}.{{read_type}}.queries.zip"), read_type=['raw_reads', 'abundtrim'])),
-        expand(os.path.join(out_dir, '{gather_type}', f"{basename}.{{aks}}.gather-pathlist.txt"), aks=alpha_ksize_scaled, gather_type=['abundtrim-gather', 'abund-gather']),
+        expand(os.path.join(out_dir, '{gather_type}', f"{basename}.{{aks}}.{{ext}}"), aks=alpha_ksize_scaled, gather_type=['abundtrim-gather', 'abund-gather'], ext=["gather-pathlist.txt", "gather.lineage_summary.tsv"]),
         expand(os.path.join(out_dir, '{gather_type}', '{sample}.{aks}.gather.krona.tsv'), sample=SAMPLES, aks=alpha_ksize_scaled, gather_type=['abundtrim-gather', 'abund-gather']),
 
 
@@ -241,6 +241,7 @@ rule tax_metagenome:
         lineages = config['database_lineage_files'],
     output:
         os.path.join(out_dir, '{gather_type}', '{sample}.{alphabet}-k{ksize}-sc{scaled}.gather.krona.tsv'),
+        os.path.join(out_dir, '{gather_type}', '{sample}.{alphabet}-k{ksize}-sc{scaled}.gather.summarized.csv'),
     resources:
         mem_mb=lambda wildcards, attempt: attempt *3000,
         partition = "low2",
@@ -252,9 +253,8 @@ rule tax_metagenome:
     shell:
         """
         mkdir -p {params.outd}
-        sourmash tax metagenome -g {input.gather} -t {input.lineages} -o {params.out_base} --output-dir {params.outd} --output-format 'krona' --rank species
+        sourmash tax metagenome -g {input.gather} -t {input.lineages} -o {params.out_base} --output-dir {params.outd} --output-format krona csv_summary --rank species
         """
-
 
 localrules: annotated_gather_csvs_to_pathlist
 rule annotated_gather_csvs_to_pathlist:
@@ -266,4 +266,28 @@ rule annotated_gather_csvs_to_pathlist:
         with open(str(output), 'w') as outF:
             for inF in input:
                 outF.write(str(inF)+ "\n")
+
+
+rule tax_metagenome_lineage_summary:
+    input:
+        gather_pathlist = os.path.join(out_dir, '{gather_type}', f"{basename}.{{aks}}.gather-pathlist.txt"),
+        #gather = expand(os.path.join(out_dir, '{{gather_type}}', '{sample}.{{alphabet}}-k{{ksize}}-sc{{scaled}}.gather.csv'), sample=SAMPLES),
+        lineages = config['database_lineage_files'],
+    output:
+        os.path.join(out_dir, '{gather_type}', f"{basename}.{{aks}}.gather.lineage_summary.tsv")
+        #os.path.join(out_dir, '{gather_type}', '{sample}.{alphabet}-k{ksize}-sc{scaled}.gather.lineage_summary.tsv'),
+    resources:
+        mem_mb=lambda wildcards, attempt: attempt *3000,
+        partition = "low2",
+        time=240,
+    params:
+        outd= lambda w: os.path.join(out_dir, f'{w.gather_type}'),
+        out_base= lambda w: f'{w.basename}.{{aks}}.gather',
+    conda: "conf/env/sourmash.yml"
+    shell:
+        """
+        mkdir -p {params.outd}
+        sourmash tax metagenome -g {input.gather_pathlist} -t {input.lineages} -o {params.out_base} --output-dir {params.outd} --output-format lineage_summary --rank species
+        """
+
 
