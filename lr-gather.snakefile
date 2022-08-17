@@ -55,7 +55,14 @@ onerror:
 rule all:
     input:
         ancient(expand(os.path.join(out_dir, f"{basename}.{{read_type}}.queries.zip"), read_type=['raw_reads', 'abundtrim'])),
-        expand(os.path.join(out_dir, '{gather_type}', f"{basename}.{{aks}}.gather-pathlist.txt"), aks=alpha_ksize_scaled, gather_type=['abundtrim-gather', 'abund-gather'])
+        expand(os.path.join(out_dir, '{gather_type}', f"{basename}.{{aks}}.gather-pathlist.txt"), aks=alpha_ksize_scaled, gather_type=['abundtrim-gather', 'abund-gather']),
+        expand(os.path.join(out_dir, '{gather_type}', '{sample}.{aks}.gather.krona.tsv'), sample=SAMPLES, aks=alpha_ksize_scaled, gather_type=['abundtrim-gather', 'abund-gather']),
+
+
+## SRA download!!
+#rule download_reads
+
+
 
 
 # k-mer abundance trimming
@@ -225,6 +232,27 @@ rule tax_annotate:
         """
         mkdir -p {params.outd}
         sourmash tax annotate -g {input.gather} -t {input.lineages} -o {params.outd}
+        """
+
+
+rule tax_metagenome:
+    input:
+        gather = os.path.join(out_dir, '{gather_type}', '{sample}.{alphabet}-k{ksize}-sc{scaled}.gather.csv'),
+        lineages = config['database_lineage_files'],
+    output:
+        os.path.join(out_dir, '{gather_type}', '{sample}.{alphabet}-k{ksize}-sc{scaled}.gather.krona.tsv'),
+    resources:
+        mem_mb=lambda wildcards, attempt: attempt *3000,
+        partition = "low2",
+        time=240,
+    params:
+        outd= lambda w: os.path.join(out_dir, f'{w.gather_type}'),
+        out_base= lambda w: f'{w.sample}.{w.alphabet}-k{w.ksize}-sc{w.scaled}.gather',
+    conda: "conf/env/sourmash.yml"
+    shell:
+        """
+        mkdir -p {params.outd}
+        sourmash tax metagenome -g {input.gather} -t {input.lineages} -o {params.out_base} --output-dir {params.outd} --output-format 'krona' --rank species
         """
 
 
