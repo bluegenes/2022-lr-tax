@@ -1,9 +1,9 @@
 name,reads,type
-HiFi_ATCC_MSA1003_long,inputs/long-read-study/HiFi_ATCC_MSA1003.fasta.gz,pacbio_hifi
 HiFi_ATCC_MSA1003_short,inputs/long-read-study/HiFi_ATCC_MSA1003_short.fasta.gz,pacbio_hifi_short
-HiFi_Zymo_D6331,inputs/long-read-study/HiFi_Zymo_D6331.fasta.gz,pacbio_hifi
+HiFi_ATCC_MSA1003_full,inputs/sra_download/SRR9328980.fq.gz,pacbio_hifi_full
 Illumina_ATCC_MSA1003,inputs/long-read-study/Illumina_ATCC_MSA1003.fasta.gz,illumina
 Illumina_Zymo_D6300,inputs/long-read-study/Illumina_Zymo_D6300.fasta.gz,illumina
-ONT_Q20_Zymo_D6300_long,inputs/long-read-study/ONT_Q20_Zymo_D6300.fasta.gz,ont
+ONT_Q20_Zymo_D6300_full,inputs/long-read-study/ONT_Q20_Zymo_D6300.fasta.gz,ont
 ONT_Q20_Zymo_D6300_short,inputs/long-read-study/ONT_Q20_Zymo_D6300_short.fasta.gz,ont_short
 ONT_R10_Zymo_D6300,inputs/long-read-study/ONT_R10_Zymo_D6300.fasta.gz,ont
+HiFi_Zymo_D6331,inputs/sra_download/SRR13128014.fq.gz,pacbio_hifi_full

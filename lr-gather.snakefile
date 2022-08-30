@@ -25,6 +25,7 @@ search_databases = config['search_databases'] # must be dictionary
 # check params are in the right format, build alpha-ksize combos and param strings
 alphabet_info = config['alphabet_info']
 alpha_ksize_scaled=[]
+nucl_alpha_ksize_scaled=[]
 all_param_str=[]
 for alpha, info in alphabet_info.items():
     scaled = info["scaled"]
@@ -38,6 +39,9 @@ for alpha, info in alphabet_info.items():
     # build a parameter for the right combinations
     #alpha_ksize += expand(f"{alpha}-k{{ksize}}", ksize = ksize)
     alpha_ksize_scaled += expand(f"{alpha}-k{{ksize}}-sc{{scaled}}", ksize = ksize, scaled=scaled)
+    if alpha in ["nucleotide", "dna", "rna"]:
+        nucl_alpha_ksize_scaled += expand(f"{alpha}-k{{ksize}}-sc{{scaled}}", ksize = ksize, scaled=scaled)
+
 
 onstart:
     print("------------------------------")
@@ -56,13 +60,8 @@ rule all:
     input:
         ancient(expand(os.path.join(out_dir, f"{basename}.{{read_type}}.queries.zip"), read_type=['raw_reads', 'abundtrim'])),
         expand(os.path.join(out_dir, '{gather_type}', f"{basename}.{{aks}}.{{ext}}"), aks=alpha_ksize_scaled, gather_type=['abundtrim-gather', 'abund-gather'], ext=["gather-pathlist.txt", "gather.lineage_summary.tsv"]),
-        expand(os.path.join(out_dir, '{gather_type}', '{sample}.{aks}.gather.krona.tsv'), sample=SAMPLES, aks=alpha_ksize_scaled, gather_type=['abundtrim-gather', 'abund-gather']),
-
-
-## SRA download!!
-#rule download_reads
-
-
+        expand(os.path.join(out_dir, '{gather_type}', '{sample}.{aks}.gather.kreport.txt'), sample=SAMPLES, aks=alpha_ksize_scaled, gather_type=['abundtrim-gather', 'abund-gather']),
+        expand(os.path.join(out_dir, '{gather_type}', '{sample}.{aks}.gather.genbank.kreport.txt'), sample=SAMPLES, aks=nucl_alpha_ksize_scaled, gather_type=['abundtrim-gather', 'abund-gather']),
 
 
 # k-mer abundance trimming
@@ -74,11 +73,13 @@ rule kmer_trim_reads:
         protected(os.path.join(out_dir, "abundtrim", "{sample}.abundtrim.fq.gz"))
     conda: 'conf/env/trim.yml'
     resources:
-        mem_mb = int(20e9/ 1e6),
+        mem_mb = int(55e9/ 1e6),
+        #mem_mb = int(20e9/ 1e6),
         partition = 'bmm',
         time=240,
     params:
-        mem = 20e9,
+        #mem = 20e9,
+        mem = 55e9,
     shell: """
             trim-low-abund.py -C 3 -Z 18 -M {params.mem} -V \
             {input.reads} -o {output} --gzip
@@ -242,6 +243,7 @@ rule tax_metagenome:
     output:
         os.path.join(out_dir, '{gather_type}', '{sample}.{alphabet}-k{ksize}-sc{scaled}.gather.krona.tsv'),
         os.path.join(out_dir, '{gather_type}', '{sample}.{alphabet}-k{ksize}-sc{scaled}.gather.summarized.csv'),
+        os.path.join(out_dir, '{gather_type}', '{sample}.{alphabet}-k{ksize}-sc{scaled}.gather.kreport.txt'),
     resources:
         mem_mb=lambda wildcards, attempt: attempt *3000,
         partition = "low2",
@@ -249,12 +251,42 @@ rule tax_metagenome:
     params:
         outd= lambda w: os.path.join(out_dir, f'{w.gather_type}'),
         out_base= lambda w: f'{w.sample}.{w.alphabet}-k{w.ksize}-sc{w.scaled}.gather',
-    conda: "conf/env/sourmash.yml"
+    #conda: "conf/env/sourmash.yml"
+    conda: "conf/env/sourmash-dev.yml"
     shell:
         """
         mkdir -p {params.outd}
-        sourmash tax metagenome -g {input.gather} -t {input.lineages} -o {params.out_base} --output-dir {params.outd} --output-format krona csv_summary --rank species
+        sourmash tax metagenome -g {input.gather} -t {input.lineages} -o {params.out_base} \
+                                --output-dir {params.outd} --output-format krona csv_summary kreport \
+                                --rank species
         """
+
+
+rule tax_metagenome_dna_no_gtdb:
+    input:
+        gather = os.path.join(out_dir, '{gather_type}', '{sample}.{alphabet}-k{ksize}-sc{scaled}.gather.csv'),
+        lineages = config['database_lineage_files'][:-1], # take off gtdb lineages
+    output:
+        os.path.join(out_dir, '{gather_type}', '{sample}.{alphabet}-k{ksize}-sc{scaled}.gather.genbank.krona.tsv'),
+        os.path.join(out_dir, '{gather_type}', '{sample}.{alphabet}-k{ksize}-sc{scaled}.gather.genbank.summarized.csv'),
+        os.path.join(out_dir, '{gather_type}', '{sample}.{alphabet}-k{ksize}-sc{scaled}.gather.genbank.kreport.txt'),
+    resources:
+        mem_mb=lambda wildcards, attempt: attempt *3000,
+        partition = "low2",
+        time=240,
+    params:
+        outd= lambda w: os.path.join(out_dir, f'{w.gather_type}'),
+        out_base= lambda w: f'{w.sample}.{w.alphabet}-k{w.ksize}-sc{w.scaled}.gather.genbank',
+    #conda: "conf/env/sourmash.yml"
+    conda: "conf/env/sourmash-dev.yml"
+    shell:
+        """
+        mkdir -p {params.outd}
+        sourmash tax metagenome -g {input.gather} -t {input.lineages} -o {params.out_base} \
+                                --output-dir {params.outd} --output-format krona csv_summary kreport \
+                                --rank species
+        """
+
 
 localrules: annotated_gather_csvs_to_pathlist
 rule annotated_gather_csvs_to_pathlist:
@@ -282,12 +314,12 @@ rule tax_metagenome_lineage_summary:
         time=240,
     params:
         outd= lambda w: os.path.join(out_dir, f'{w.gather_type}'),
-        out_base= lambda w: f'{w.basename}.{{aks}}.gather',
+        out_base= lambda w: f'{basename}.{w.aks}.gather',
     conda: "conf/env/sourmash.yml"
     shell:
         """
         mkdir -p {params.outd}
-        sourmash tax metagenome -g {input.gather_pathlist} -t {input.lineages} -o {params.out_base} --output-dir {params.outd} --output-format lineage_summary --rank species
+        sourmash tax metagenome --from-file {input.gather_pathlist} -t {input.lineages} -o {params.out_base} --output-dir {params.outd} --output-format lineage_summary --rank species
         """
 
 
