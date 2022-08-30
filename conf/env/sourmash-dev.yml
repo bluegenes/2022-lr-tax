@@ -1,0 +1,10 @@
+name: sml
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - python=3.10
+  - pip
+  - pip:
+    - git+https://github.com/dib-lab/sourmash@latest
