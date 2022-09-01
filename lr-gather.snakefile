@@ -12,8 +12,6 @@ basename = config.get("basename", 'long-read-study')
 
 sample_info = pd.read_csv(config['sample_info'])
 SAMPLES = sample_info["name"].to_list()
-# hacky, but useful: drop k-mer trimmed read name into sample_info dict for easier finding
-sample_info['abundtrim'] = f'{out_dir}/abundtrim/' + sample_info['name'] + '.abundtrim.fq.gz'
 # rename reads --> raw_reads for clarity
 sample_info.rename(columns={'reads': 'raw_reads'}, inplace=True)
 # set name as index for easy access
@@ -58,36 +56,13 @@ onerror:
 
 rule all:
     input:
-        ancient(expand(os.path.join(out_dir, f"{basename}.{{read_type}}.queries.zip"), read_type=['raw_reads', 'abundtrim'])),
-        expand(os.path.join(out_dir, '{gather_type}', f"{basename}.{{aks}}.{{ext}}"), aks=alpha_ksize_scaled, gather_type=['abundtrim-gather', 'abund-gather'], ext=["gather-pathlist.txt", "gather.lineage_summary.tsv"]),
-        expand(os.path.join(out_dir, '{gather_type}', '{sample}.{aks}.gather.kreport.txt'), sample=SAMPLES, aks=alpha_ksize_scaled, gather_type=['abundtrim-gather', 'abund-gather']),
-        expand(os.path.join(out_dir, '{gather_type}', '{sample}.{aks}.gather.genbank.kreport.txt'), sample=SAMPLES, aks=nucl_alpha_ksize_scaled, gather_type=['abundtrim-gather', 'abund-gather']),
+        ancient(expand(os.path.join(out_dir, f"{basename}.{{read_type}}.queries.zip"), read_type=['raw_reads'])),
+        expand(os.path.join(out_dir, '{gather_type}', f"{basename}.{{aks}}.{{ext}}"), aks=alpha_ksize_scaled, gather_type=['gather'], ext=["gather-pathlist.txt", "gather.lineage_summary.tsv"]),
+        expand(os.path.join(out_dir, '{gather_type}', '{sample}.{aks}.gather.kreport.txt'), sample=SAMPLES, aks=alpha_ksize_scaled, gather_type=['gather']),
+        expand(os.path.join(out_dir, '{gather_type}', '{sample}.{aks}.gather.genbank.kreport.txt'), sample=SAMPLES, aks=nucl_alpha_ksize_scaled, gather_type=['gather']),
 
-
-# k-mer abundance trimming
-rule kmer_trim_reads:
-    input: 
-        #reads = ancient(outdir + '/trim/{sample}.trim.fq.gz'),
-        reads = ancient(lambda w: sample_info.at[w.sample, "raw_reads"])
-    output:
-        protected(os.path.join(out_dir, "abundtrim", "{sample}.abundtrim.fq.gz"))
-    conda: 'conf/env/trim.yml'
-    resources:
-        mem_mb = int(55e9/ 1e6),
-        #mem_mb = int(20e9/ 1e6),
-        partition = 'bmm',
-        time=240,
-    params:
-        #mem = 20e9,
-        mem = 55e9,
-    shell: """
-            trim-low-abund.py -C 3 -Z 18 -M {params.mem} -V \
-            {input.reads} -o {output} --gzip
-    """
 
 rule sourmash_sketch_translate:
-    #input: os.path.join(out_dir, "{read_type}", "{sample}.abundtrim.fq.gz")
-   # input: lambda w: sample_info.at[w.sample, "reads"] # non-abundtrimmed sample
     input: ancient(lambda w: sample_info.at[w.sample, w.read_type]) # get raw reads or abundtrim reads. read_type = 'reads' or 'abundtrim'
     output:
         os.path.join(out_dir, "{read_type}", "{sample}.translate.sig.zip")
@@ -107,8 +82,6 @@ rule sourmash_sketch_translate:
         """
 
 rule sourmash_sketch_dna:
-    #input: os.path.join(out_dir, "abundtrim", "{sample}.abundtrim.fq.gz")
-   # input: lambda w: sample_info.at[w.sample, "reads"] # non-abundtrimmed sample
     input: ancient(lambda w: sample_info.at[w.sample, w.read_type]) # get raw reads or abundtrim reads. read_type = 'raw_reads' or 'abundtrim'
     output:
         os.path.join(out_dir, "{read_type}", "{sample}.dna.sig.zip")
@@ -144,15 +117,14 @@ rule sig_cat:
         sourmash sig cat {input} -o {output} 2> {log}
         """
 
-# consider switching this to just prefetch - think over utility of abundtrim results vs abund results
-rule gather_abundtrim_sig_from_zipfile:
+rule gather_sig_from_zipfile:
     input:
-        query_zip=ancient(os.path.join(out_dir, f"{basename}.abundtrim.queries.zip")),
+        query_zip=ancient(os.path.join(out_dir, f"{basename}.raw_reads.queries.zip")),
         databases = lambda w: search_databases[f"{w.alphabet}-k{w.ksize}"]
     output:
-        prefetch_csv=os.path.join(out_dir, 'abundtrim-gather', '{sample}.{alphabet}-k{ksize}-sc{scaled}.prefetch.csv'),
-        gather_csv=os.path.join(out_dir, 'abundtrim-gather', '{sample}.{alphabet}-k{ksize}-sc{scaled}.gather.csv'),
-        gather_txt=os.path.join(out_dir, 'abundtrim-gather', '{sample}.{alphabet}-k{ksize}-sc{scaled}.gather.txt'),
+        prefetch_csv=os.path.join(out_dir, 'gather', '{sample}.{alphabet}-k{ksize}-sc{scaled}.prefetch.csv'),
+        gather_csv=os.path.join(out_dir, 'gather', '{sample}.{alphabet}-k{ksize}-sc{scaled}.gather.csv'),
+        gather_txt=os.path.join(out_dir, 'gather', '{sample}.{alphabet}-k{ksize}-sc{scaled}.gather.txt'),
     params:
         #threshold_bp = config['sourmash_database_threshold_bp'],
         alpha_cmd = lambda w: "--" + w.alphabet 
@@ -160,8 +132,8 @@ rule gather_abundtrim_sig_from_zipfile:
         mem_mb=lambda wildcards, attempt: attempt *30000,
         time=4000,
         partition="bmm",
-    log: os.path.join(logs_dir, "abundtrim-gather", "{sample}.{alphabet}-k{ksize}-sc{scaled}.gather.log")
-    benchmark: os.path.join(benchmarks_dir, "abundtrim-gather", "{sample}.{alphabet}-k{ksize}-sc{scaled}.gather.benchmark")
+    log: os.path.join(logs_dir, "gather", "{sample}.{alphabet}-k{ksize}-sc{scaled}.gather.log")
+    benchmark: os.path.join(benchmarks_dir, "gather", "{sample}.{alphabet}-k{ksize}-sc{scaled}.gather.benchmark")
     conda: "conf/env/sourmash.yml"
     shell:
         # touch output to let workflow continue in cases where 0 results are found
@@ -172,48 +144,13 @@ rule gather_abundtrim_sig_from_zipfile:
         sourmash sig grep {wildcards.sample} {input.query_zip} {params.alpha_cmd} \
                  --ksize {wildcards.ksize} | sourmash gather - {input.databases} \
                  -o {output.gather_csv} -k {wildcards.ksize} --scaled {wildcards.scaled} {params.alpha_cmd} \
-                 --save-prefetch-csv {output.prefetch_csv} --ignore-abundance > {output.gather_txt} 2> {log}
+                 --save-prefetch-csv {output.prefetch_csv} > {output.gather_txt} 2> {log}
         touch {output.prefetch_csv}
         touch {output.gather_txt}
         touch {output.gather_csv}
         """
                 #--threshold-bp={params.threshold_bp} \ 
                  #--picklist {input.query_picklist}:name:identprefix:exclude \
-
-
-rule gather_raw_read_sig_using_abundtrim_prefetch:
-    input:
-        query_zip=ancient(os.path.join(out_dir, f"{basename}.raw_reads.queries.zip")),
-        prefetch_csv=os.path.join(out_dir, 'abundtrim-gather', '{sample}.{alphabet}-k{ksize}-sc{scaled}.prefetch.csv'),
-        databases = lambda w: search_databases[f"{w.alphabet}-k{w.ksize}"]
-    output:
-        gather_csv=os.path.join(out_dir, 'abund-gather', '{sample}.{alphabet}-k{ksize}-sc{scaled}.gather.csv'),
-        gather_txt=os.path.join(out_dir, 'abund-gather', '{sample}.{alphabet}-k{ksize}-sc{scaled}.gather.txt'),
-    params:
-        #threshold_bp = config['sourmash_database_threshold_bp'],
-        alpha_cmd = lambda w: "--" + w.alphabet
-    resources:
-        mem_mb=lambda wildcards, attempt: attempt *30000,
-        time=4000,
-        partition="bmm",
-    log: os.path.join(logs_dir, "abundtrim-gather", "{sample}.{alphabet}-k{ksize}-sc{scaled}.gather.log")
-    benchmark: os.path.join(benchmarks_dir, "abundtrim-gather", "{sample}.{alphabet}-k{ksize}-sc{scaled}.gather.benchmark")
-    conda: "conf/env/sourmash.yml"
-    shell:
-        # touch output to let workflow continue in cases where 0 results are found
-        """
-        echo "DB is {input.databases}"
-        echo "DB is {input.databases}" > {log}
-
-        sourmash sig grep {wildcards.sample} {input.query_zip} {params.alpha_cmd} \
-                 --ksize {wildcards.ksize} | sourmash gather - {input.databases} \
-                 -o {output.gather_csv} -k {wildcards.ksize} --scaled {wildcards.scaled} \
-                 --picklist {input.prefetch_csv}::prefetch {params.alpha_cmd} \
-                  > {output.gather_txt} 2> {log}
-        touch {output.gather_txt}
-        touch {output.gather_csv}
-        """
-
 
 rule tax_annotate:
     input:
@@ -321,5 +258,3 @@ rule tax_metagenome_lineage_summary:
         mkdir -p {params.outd}
         sourmash tax metagenome --from-file {input.gather_pathlist} -t {input.lineages} -o {params.out_base} --output-dir {params.outd} --output-format lineage_summary --rank species
         """
-
-
