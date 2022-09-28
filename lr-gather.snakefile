@@ -134,7 +134,8 @@ rule gather_sig_from_zipfile:
         partition="bmm",
     log: os.path.join(logs_dir, "gather", "{sample}.{alphabet}-k{ksize}-sc{scaled}.gather.log")
     benchmark: os.path.join(benchmarks_dir, "gather", "{sample}.{alphabet}-k{ksize}-sc{scaled}.gather.benchmark")
-    conda: "conf/env/sourmash.yml"
+    #conda: "conf/env/sourmash.yml"
+    conda: "conf/env/sourmash4.5.yml"
     shell:
         # touch output to let workflow continue in cases where 0 results are found
         """
@@ -165,7 +166,8 @@ rule tax_annotate:
     params:
         outd= lambda w: os.path.join(out_dir, f'{w.gather_type}'),
         lingather= lambda w: os.path.join(out_dir, f'{w.gather_type}', f'{w.sample}.{w.alphabet}-k{w.ksize}-sc{w.scaled}.gather.with-lineages.csv'),
-    conda: "conf/env/sourmash.yml"
+    #conda: "conf/env/sourmash.yml"
+    conda: "conf/env/sourmash4.5.yml"
     shell:
         """
         mkdir -p {params.outd}
@@ -189,7 +191,8 @@ rule tax_metagenome:
         outd= lambda w: os.path.join(out_dir, f'{w.gather_type}'),
         out_base= lambda w: f'{w.sample}.{w.alphabet}-k{w.ksize}-sc{w.scaled}.gather',
     #conda: "conf/env/sourmash.yml"
-    conda: "conf/env/sourmash-dev.yml"
+    #conda: "conf/env/sourmash-dev.yml"
+    conda: "conf/env/sourmash4.5.yml"
     shell:
         """
         mkdir -p {params.outd}
@@ -215,7 +218,8 @@ rule tax_metagenome_dna_no_gtdb:
         outd= lambda w: os.path.join(out_dir, f'{w.gather_type}'),
         out_base= lambda w: f'{w.sample}.{w.alphabet}-k{w.ksize}-sc{w.scaled}.gather.genbank',
     #conda: "conf/env/sourmash.yml"
-    conda: "conf/env/sourmash-dev.yml"
+    #conda: "conf/env/sourmash-dev.yml"
+    conda: "conf/env/sourmash4.5.yml"
     shell:
         """
         mkdir -p {params.outd}
@@ -252,7 +256,8 @@ rule tax_metagenome_lineage_summary:
     params:
         outd= lambda w: os.path.join(out_dir, f'{w.gather_type}'),
         out_base= lambda w: f'{basename}.{w.aks}.gather',
-    conda: "conf/env/sourmash.yml"
+    #conda: "conf/env/sourmash.yml"
+    conda: "conf/env/sourmash4.5.yml"
     shell:
         """
         mkdir -p {params.outd}
