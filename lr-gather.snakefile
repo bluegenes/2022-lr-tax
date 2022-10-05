@@ -117,36 +117,89 @@ rule sig_cat:
         sourmash sig cat {input} -o {output} 2> {log}
         """
 
-rule gather_sig_from_zipfile:
+rule prefetch_sig_from_zipfile:
+    message:
+        """
+        Find all potentially relevant database matches for:
+            sample: {wildcards.sample}
+            alphabet: {wildcards.alphabet}
+            ksize: {wildcards.ksize}
+            scaled: {wildcards.scaled}
+        """
     input:
         query_zip=ancient(os.path.join(out_dir, f"{basename}.raw_reads.queries.zip")),
         databases = lambda w: search_databases[f"{w.alphabet}-k{w.ksize}"]
     output:
+        # touch output to let workflow continue in cases where 0 results are found
+        prefetch_csv=touch(os.path.join(out_dir, 'gather', '{sample}.{alphabet}-k{ksize}-sc{scaled}.prefetch.csv')),
+        #known = touch(outdir + "/gather/{sample}.{alphabet}-k{ksize}-sc{scaled}.known.sig.zip"),
+    params:
+        threshold_bp = config.get('sourmash_database_threshlold_bp', '0'),
+        alpha_cmd = lambda w: "--" + w.alphabet
+    resources:
+        mem_mb=lambda wildcards, attempt: attempt *100000,
+        time=1200,
+        #time=4000,
+        partition="high2",
+    log: os.path.join(logs_dir, "gather", "{sample}.{alphabet}-k{ksize}-sc{scaled}.prefetch.log")
+    benchmark: os.path.join(benchmarks_dir, "gather", "{sample}.{alphabet}-k{ksize}-sc{scaled}.prefetch.benchmark")
+    #conda: "conf/env/sourmash.yml"
+    #conda: "conf/env/sourmash4.5.yml"
+    conda: "conf/env/sourmash-dev.yml"
+    shell:
+        """
+        echo "DB: {input.databases}"
+        echo "DB: {input.databases}" > {log}
+
+        sourmash sig grep {wildcards.sample} {input.query_zip} {params.alpha_cmd} \
+                 --ksize {wildcards.ksize} | sourmash prefetch - {input.databases} \
+                 -o {output.prefetch_csv} -k {wildcards.ksize} --scaled {wildcards.scaled} {params.alpha_cmd} \
+                 --threshold-bp {params.threshold_bp} 2>> {log}
+        """
+#--save-matching-hashes={output.known} 2>> {log}
+
+rule gather_sig_from_zipfile:
+    input:
+        #query = outdir + "/sigs/{sample}.trim.sig.zip",
+        query_zip=ancient(os.path.join(out_dir, f"{basename}.raw_reads.queries.zip")),
+        #known = outdir + "/gather/{sample}.{alphabet}-k{ksize}-sc{scaled}.known.sig.zip",
+        databases = lambda w: search_databases[f"{w.alphabet}-k{w.ksize}"],
         prefetch_csv=os.path.join(out_dir, 'gather', '{sample}.{alphabet}-k{ksize}-sc{scaled}.prefetch.csv'),
+    output:
         gather_csv=os.path.join(out_dir, 'gather', '{sample}.{alphabet}-k{ksize}-sc{scaled}.gather.csv'),
         gather_txt=os.path.join(out_dir, 'gather', '{sample}.{alphabet}-k{ksize}-sc{scaled}.gather.txt'),
     params:
-        #threshold_bp = config['sourmash_database_threshold_bp'],
+        threshold_bp = config.get('sourmash_database_threshold_bp', '0'),
         alpha_cmd = lambda w: "--" + w.alphabet 
     resources:
         mem_mb=lambda wildcards, attempt: attempt *30000,
-        time=4000,
-        partition="bmm",
+        time=800,
+        partition="med2",
     log: os.path.join(logs_dir, "gather", "{sample}.{alphabet}-k{ksize}-sc{scaled}.gather.log")
     benchmark: os.path.join(benchmarks_dir, "gather", "{sample}.{alphabet}-k{ksize}-sc{scaled}.gather.benchmark")
     #conda: "conf/env/sourmash.yml"
-    conda: "conf/env/sourmash4.5.yml"
+    #conda: "conf/env/sourmash4.5.yml"
+    conda: "conf/env/sourmash-dev.yml"
     shell:
         # touch output to let workflow continue in cases where 0 results are found
         """
-        echo "DB is {input.databases}"
-        echo "DB is {input.databases}" > {log}
+        filesize=$(wc -c <{input.prefetch_csv})
+        if [ $filesize -lt 100 ]; then
+            echo "** ERROR: prefetch didn't find anything for sample '{wildcards.sample}'."
+            echo "** That means there are no matches in the database for this sample!"
+            echo "** You'll need to change either your database or remove this sample from the config. :("
+            exit 1
+        fi
+
+        echo "DB(s): {input.databases}"
+        echo "DB(s): {input.databases}" > {log}
 
         sourmash sig grep {wildcards.sample} {input.query_zip} {params.alpha_cmd} \
                  --ksize {wildcards.ksize} | sourmash gather - {input.databases} \
-                 -o {output.gather_csv} -k {wildcards.ksize} --scaled {wildcards.scaled} {params.alpha_cmd} \
-                 --save-prefetch-csv {output.prefetch_csv} > {output.gather_txt} 2> {log}
-        touch {output.prefetch_csv}
+                 --threshold-bp {params.threshold_bp} --picklist {input.prefetch_csv}::prefetch \
+                 -o {output.gather_csv} -k {wildcards.ksize} --scaled {wildcards.scaled} \
+                 {params.alpha_cmd} > {output.gather_txt} 2>> {log}
+        
         touch {output.gather_txt}
         touch {output.gather_csv}
         """
@@ -191,8 +244,8 @@ rule tax_metagenome:
         outd= lambda w: os.path.join(out_dir, f'{w.gather_type}'),
         out_base= lambda w: f'{w.sample}.{w.alphabet}-k{w.ksize}-sc{w.scaled}.gather',
     #conda: "conf/env/sourmash.yml"
-    #conda: "conf/env/sourmash-dev.yml"
-    conda: "conf/env/sourmash4.5.yml"
+    #conda: "conf/env/sourmash4.5.yml"
+    conda: "conf/env/sourmash-dev.yml"
     shell:
         """
         mkdir -p {params.outd}
@@ -218,8 +271,8 @@ rule tax_metagenome_dna_no_gtdb:
         outd= lambda w: os.path.join(out_dir, f'{w.gather_type}'),
         out_base= lambda w: f'{w.sample}.{w.alphabet}-k{w.ksize}-sc{w.scaled}.gather.genbank',
     #conda: "conf/env/sourmash.yml"
-    #conda: "conf/env/sourmash-dev.yml"
-    conda: "conf/env/sourmash4.5.yml"
+    #conda: "conf/env/sourmash4.5.yml"
+    conda: "conf/env/sourmash-dev.yml"
     shell:
         """
         mkdir -p {params.outd}

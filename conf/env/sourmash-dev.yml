@@ -7,4 +7,5 @@ dependencies:
   - python=3.10
   - pip
   - pip:
-    - git+https://github.com/dib-lab/sourmash@latest
+    #- git+https://github.com/dib-lab/sourmash@latest
+    - git+https://github.com/dib-lab/sourmash@kreport-col3
