@@ -142,13 +142,20 @@ def assess_kreport(dataset_name, read_dataset, theoretical_dict, kreport_fname, 
             # for sourmash, check if % exceeds minimum % detection threshold
             if "Sourmash" in kreport_fname:
                 theoretical_percent = theoretical_info[theoretical_info['Taxon'] == t]["Theoretical Distribution"].values[0]
-                this_perc = tempD.loc[kreport_df['rank'] == rk, 'proportion'].sum() # same idea as for counts
+                # same process as for counts, but smash percentages need to be mult x100 to be equivalent
+                this_perc = float(tempD.loc[kreport_df['rank'] == rk, 'proportion'].sum())
+                this_perc = this_perc*100
                 # now, check results at the different detection thresholds.
                 for thresh in detection_thresholds:
                     res ="FN"
                     perc_needed = theoretical_percent * thresh
-                    if this_perc >= perc_needed and this_perc >0:
+                    if this_perc >= perc_needed and this_count >0:
                         res="TP"
+                    # Turns out this is giving a lot of FN bc we only have 2 decimals in kreport proportion. 
+                    # so even if we only need a tiny percentage and we have that, the kreport percentage may read 0.00, giving us a FN.
+                    # Would be better to use full gather results so can better assess for low-level taxa
+                    #else:
+                    #    print("perc_needed:", perc_needed, " this_perc:", this_perc)
                     detection_info.append(res)
             # for all other tools, check if read count exceeds minimum read threshold
             else:
