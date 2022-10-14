@@ -196,11 +196,12 @@ def main(args):
     all_results = pd.DataFrame.from_records(all_taxres, columns=TaxResult._fields)
     all_results.head()
     # write to csv
-    all_results.to_csv("kreport-results.csv.gz")
+    all_results.to_csv("kreport-results.csv.gz", index=False)
 
 def cmdline(sys_args):
     "Command line entry point w/argparse action."
     p = argparse.ArgumentParser()
+#    p.add_argument("--file-dir", default="notebooks")
     args = p.parse_args()
     return main(args)
 
